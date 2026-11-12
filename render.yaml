@@ -1,0 +1,26 @@
+# Paid web service and persistent disk. Review Render's charges before creating.
+services:
+  - type: web
+    name: mm1
+    runtime: node
+    plan: 0.5c-512mb
+    region: frankfurt
+    branch: main
+    numInstances: 1
+    buildCommand: npm ci && npm run check && npm test
+    startCommand: npm start
+    healthCheckPath: /
+    autoDeployTrigger: checksPass
+    disk:
+      name: mm1-data
+      mountPath: /var/data
+      sizeGB: 1
+    envVars:
+      - key: NODE_VERSION
+        value: "24.22.1"
+      - key: NODE_ENV
+        value: production
+      - key: DATA_DIR
+        value: /var/data/mm1
+      - key: SESSION_SECRET
+        generateValue: true
