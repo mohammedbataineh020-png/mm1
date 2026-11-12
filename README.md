@@ -25,6 +25,16 @@ A full-stack authentication demo built with Node.js, Express, SQLite, server-sid
 
 4. Open http://localhost:3000
 
+## Validation
+
+Run `npm run check` for JavaScript syntax checks and `npm test` for HTTP integration tests.
+The tests start isolated server processes with temporary SQLite databases and verify
+registration, duplicate accounts, invalid passwords, protected pages, logout, persisted
+accounts and sessions after restart, rate limiting, private-file protection, UTF-8
+password limits, and production cookie/secret settings. Test accounts are discarded.
+GitHub Actions runs both checks using the committed dependency lockfile (`npm ci`).
+These local tests do not replace testing the final HTTPS deployment and persistent disk.
+
 ## Features
 
 - Account registration with unique username/email identifier

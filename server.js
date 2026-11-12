@@ -92,8 +92,8 @@ app.post("/api/auth/register", authLimiter, async (req, res, next) => {
     if (/[\s]/.test(identifier)) {
       return res.status(400).json({ error: "Username or email cannot contain spaces." });
     }
-    if (password.length < 8 || password.length > 72) {
-      return res.status(400).json({ error: "Password must be between 8 and 72 characters." });
+    if (password.length < 8 || Buffer.byteLength(password, "utf8") > 72) {
+      return res.status(400).json({ error: "Password must be at least 8 characters and at most 72 UTF-8 bytes." });
     }
 
     const passwordHash = await bcrypt.hash(password, 12);
@@ -164,30 +164,19 @@ app.get("/dashboard", requireAuth, (req, res) => {
   res.sendFile(path.join(__dirname, "dashboard.html"));
 });
 
-// Keep server code, configuration templates, database files, and the
-// protected dashboard HTML out of the public static-file directory.
-app.use((req, res, next) => {
-  const pathname = decodeURIComponent(req.path);
-  const blocked = new Set([
-    "/server.js", "/package.json", "/package-lock.json",
-    "/README.md", "/.env.example", "/.gitignore", "/dashboard.html"
-  ]);
-  if (
-    blocked.has(pathname) ||
-    pathname === "/data" || pathname.startsWith("/data/") ||
-    pathname === "/node_modules" || pathname.startsWith("/node_modules/")
-  ) {
-    return res.sendStatus(404);
-  }
-  next();
-});
-
-app.use(express.static(__dirname, {
-  index: "index.html",
-  dotfiles: "deny",
-  etag: true,
-  maxAge: NODE_ENV === "production" ? "1h" : 0
-}));
+// Serve only the intended public assets. Never expose the repository root,
+// archives, tests, or SQLite files, including a custom DATA_DIR.
+for (const [url, filename] of Object.entries({
+  "/": "index.html",
+  "/index.html": "index.html",
+  "/script.js": "script.js",
+  "/styles.css": "styles.css"
+})) {
+  app.get(url, (req, res) => res.sendFile(path.join(__dirname, filename), {
+    maxAge: NODE_ENV === "production" ? "1h" : 0,
+    dotfiles: "deny"
+  }));
+}
 
 app.use((req, res) => res.status(404).json({ error: "Page not found." }));
 
