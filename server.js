@@ -164,6 +164,24 @@ app.get("/dashboard", requireAuth, (req, res) => {
   res.sendFile(path.join(__dirname, "dashboard.html"));
 });
 
+// Keep server code, configuration templates, database files, and the
+// protected dashboard HTML out of the public static-file directory.
+app.use((req, res, next) => {
+  const pathname = decodeURIComponent(req.path);
+  const blocked = new Set([
+    "/server.js", "/package.json", "/package-lock.json",
+    "/README.md", "/.env.example", "/.gitignore", "/dashboard.html"
+  ]);
+  if (
+    blocked.has(pathname) ||
+    pathname === "/data" || pathname.startsWith("/data/") ||
+    pathname === "/node_modules" || pathname.startsWith("/node_modules/")
+  ) {
+    return res.sendStatus(404);
+  }
+  next();
+});
+
 app.use(express.static(__dirname, {
   index: "index.html",
   dotfiles: "deny",
