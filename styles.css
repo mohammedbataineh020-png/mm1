@@ -71,6 +71,8 @@ svg { display: block; }
 }
 
 .theme-dot {
+  /* Keep rapid color taps from triggering double-tap page zoom. */
+  touch-action: manipulation;
   width: 17px;
   height: 17px;
   border-radius: 50%;
