@@ -74,6 +74,8 @@ const authLimiter = rateLimit({
   message: { error: "Too many attempts. Please try again in 15 minutes." }
 });
 
+require("./google-auth").installGoogleAuth(app, { db, limiter: authLimiter });
+
 function requireAuth(req, res, next) {
   if (!req.session.user) {
     return res.status(401).json({ error: "Please sign in to continue." });

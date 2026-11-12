@@ -487,3 +487,7 @@ svg { display: block; }
   * { animation: none !important; transition-duration: 0.01ms !important; }
 }
 .auth-note { margin-top: 20px; text-align: center; color: #777d8d; font-size: 0.65rem; line-height: 1.6; }
+
+.google-signin { display: block; margin-top: 18px; padding: 12px; border: 1px solid var(--line); border-radius: 12px; text-align: center; color: var(--text); text-decoration: none; font-size: 14px; touch-action: manipulation; }
+.google-signin:hover { background: rgba(255,255,255,.08); }
+.google-signin:focus-visible { outline: 2px solid var(--lamp-accent); outline-offset: 3px; }

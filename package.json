@@ -7,7 +7,7 @@
   "scripts": {
     "start": "node server.js",
     "dev": "node --watch server.js",
-    "check": "node --check server.js && node --check script.js",
+    "check": "node --check server.js && node --check script.js && node --check google-auth.js",
     "test": "node --test"
   },
   "engines": {
@@ -21,6 +21,7 @@
     "express": "^4.21.2",
     "express-rate-limit": "^7.5.0",
     "express-session": "^1.18.1",
+    "google-auth-library": "^11.3.4",
     "helmet": "^8.0.0"
   }
 }

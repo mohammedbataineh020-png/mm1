@@ -56,7 +56,7 @@ These local tests do not replace testing the final HTTPS deployment and persiste
 
 This is a Node.js application. GitHub Pages only hosts static files and cannot run the Express server or SQLite database. Deploy the app to a Node.js host with persistent disk storage, set `NODE_ENV=production`, set a strong `SESSION_SECRET`, and configure `DATA_DIR` to a persistent writable directory. Use HTTPS in production.
 
-The Google, GitHub, and Apple buttons from the original mockup are intentionally not presented as working sign-in methods; OAuth providers require separate provider credentials and callback configuration.
+Google sign-in is implemented but requires the configuration below. GitHub and Apple sign-in are not implemented.
 
 ## Deploy to Render
 
@@ -77,7 +77,7 @@ and a 1 GB persistent disk. Review Render's current price before creating it.
 The build runs the integration tests before starting the application. Later deploys
 wait for GitHub checks to pass. Keep a single service instance with this local SQLite
 setup. Set up SQLite-consistent off-host backups before storing important user data;
-never commit database files or secrets to GitHub. Password recovery and social sign-in
+never commit database files or secrets to GitHub. Password recovery and providers other than Google
 remain outside this version's scope. Its dashboard is a simple signed-in welcome page.
 
 ## Try the complete app from a phone (GitHub Codespaces)
@@ -97,3 +97,16 @@ while it is running, and accounts remain only while that codespace's data exists
 Deleting the codespace also deletes its uncommitted SQLite data. This is a test
 environment, not always-on public hosting. The initial image build and opening
 from an actual iPhone still need to be verified in your account.
+
+## Google sign-in setup
+
+Google sign-in requires a Google Auth Platform OAuth client of type Web application,
+an OAuth consent screen, and an exact authorized redirect URI:
+`https://YOUR-LIVE-HOST/api/auth/google/callback`. Add test users if the Google app
+is in testing mode. Set GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET and
+GOOGLE_REDIRECT_URI in the host environment, then redeploy. Never send or commit
+the client secret. Locally the callback can be http://localhost:3000/api/auth/google/callback.
+The Google button returns an explanatory 503 until configured. GitHub Pages
+cannot run this route. Real Google account login remains unverified until the host
+and credentials are configured. Google identities are stored separately by subject;
+matching an email never automatically links an existing password account.
