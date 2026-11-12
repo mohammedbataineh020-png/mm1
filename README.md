@@ -79,3 +79,21 @@ wait for GitHub checks to pass. Keep a single service instance with this local S
 setup. Set up SQLite-consistent off-host backups before storing important user data;
 never commit database files or secrets to GitHub. Password recovery and social sign-in
 remain outside this version's scope. Its dashboard is a simple signed-in welcome page.
+
+## Try the complete app from a phone (GitHub Codespaces)
+
+Open https://codespaces.new/mohammedbataineh020-png/mm1?quickstart=1
+in Safari or Chrome. Sign into GitHub if needed, choose the smallest (2-core)
+machine, and create or resume the codespace. The configuration installs the
+packages and starts MM1 automatically. Port 3000 is labeled **MM1 Website** and
+requests opening the app in a browser. If your browser blocks that opening,
+use the **Ports** panel and choose **Open in Browser** for port 3000. Keep the
+port private; sign into GitHub in that browser to access the preview.
+
+No terminal commands or source edits are required. You can register, sign in,
+and sign out on the preview URL. Codespaces has a limited monthly free quota;
+do not enable paid usage. Stop the codespace when finished. The URL only works
+while it is running, and accounts remain only while that codespace's data exists.
+Deleting the codespace also deletes its uncommitted SQLite data. This is a test
+environment, not always-on public hosting. The initial image build and opening
+from an actual iPhone still need to be verified in your account.

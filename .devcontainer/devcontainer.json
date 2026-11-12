@@ -1,0 +1,14 @@
+{
+  "name": "MM1 Website Preview",
+  "image": "mcr.microsoft.com/devcontainers/javascript-node:1-22-bookworm",
+  "postCreateCommand": "npm ci",
+  "postStartCommand": "bash .devcontainer/start-preview.sh",
+  "waitFor": "postCreateCommand",
+  "forwardPorts": [3000],
+  "portsAttributes": {
+    "3000": {
+      "label": "MM1 Website",
+      "onAutoForward": "openBrowser"
+    }
+  }
+}
