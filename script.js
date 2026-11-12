@@ -195,7 +195,6 @@ $("#eyeBtn").addEventListener("click", (e) => {
 });
 
 /* ============ Misc clicks ============ */
-$("#forgot").addEventListener("click", (e) => { e.preventDefault(); tone("click"); });
 document.querySelectorAll(".social button").forEach((b) =>
   b.addEventListener("click", () => {
     tone("click");
