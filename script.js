@@ -195,7 +195,6 @@ $("#eyeBtn").addEventListener("click", (e) => {
 });
 
 /* ============ Misc clicks ============ */
-$("#forgot").addEventListener("click", (e) => { e.preventDefault(); tone("click"); });
 document.querySelectorAll(".social button").forEach((b) =>
   b.addEventListener("click", () => {
     tone("click");
@@ -233,8 +232,8 @@ form.addEventListener("submit", (e) => {
     showError("Please fill in all fields to continue.", bad);
     return;
   }
-  if (activeTab === "register" && password.value.length < 6) {
-    showError("Password must be at least 6 characters.", [$("#passField")]);
+  if (activeTab === "register" && password.value.length < 8) {
+    showError("Password must be at least 8 characters.", [$("#passField")]);
     return;
   }
 
@@ -242,7 +241,32 @@ form.addEventListener("submit", (e) => {
   submitBtn.classList.add("loading");
   submitBtn.disabled = true;
   tone("click");
-  setTimeout(showSuccess, 1500);
+
+  const endpoint = activeTab === "register" ? "/api/auth/register" : "/api/auth/login";
+  fetch(endpoint, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "same-origin",
+    body: JSON.stringify({
+      identifier: username.value.trim(),
+      password: password.value
+    })
+  })
+    .then(async (response) => {
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.error || "Authentication failed. Please try again.");
+      return data;
+    })
+    .then(() => {
+      showSuccess();
+      window.setTimeout(() => window.location.assign("/dashboard"), 850);
+    })
+    .catch((error) => {
+      busy = false;
+      submitBtn.classList.remove("loading");
+      submitBtn.disabled = false;
+      showError(error.message || "Could not connect to the server. Please try again.", []);
+    });
 });
 
 function showSuccess() {
