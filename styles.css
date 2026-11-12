@@ -484,3 +484,4 @@ svg { display: block; }
 @media (prefers-reduced-motion: reduce) {
   * { animation: none !important; transition-duration: 0.01ms !important; }
 }
+.auth-note { margin-top: 20px; text-align: center; color: #777d8d; font-size: 0.65rem; line-height: 1.6; }
