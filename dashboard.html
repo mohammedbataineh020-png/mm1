@@ -10,10 +10,11 @@
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
   <style>
     * { box-sizing: border-box; }
-    body { margin: 0; min-height: 100vh; display: grid; place-items: center; padding: 24px; background: #0a0a0f; color: #f4f5f9; font-family: "Plus Jakarta Sans", system-ui, sans-serif; }
-    main { width: min(520px, 100%); padding: 36px; border: 1px solid rgba(255,255,255,.09); border-radius: 24px; background: linear-gradient(180deg,#191a23,#0e0f15); box-shadow: 0 30px 80px #0009; }
+    body { margin: 0; min-height: 100vh; min-height: 100svh; display: grid; grid-template-columns: minmax(0, 1fr); place-items: center; padding: 20px; background: #0a0a0f; color: #f4f5f9; font-family: "Plus Jakarta Sans", system-ui, sans-serif; }
+    main { width: 100%; max-width: 520px; min-width: 0; padding: clamp(24px, 6vw, 36px); border: 1px solid rgba(255,255,255,.09); border-radius: 24px; background: linear-gradient(180deg,#191a23,#0e0f15); box-shadow: 0 30px 80px #0009; }
     .mark { width: 54px; height: 54px; display: grid; place-items: center; border-radius: 18px; background: #ffab3d22; color: #ffab3d; font-size: 26px; }
-    h1 { margin: 24px 0 8px; font-size: 1.8rem; }
+    h1 { margin: 24px 0 8px; font-size: clamp(24px, 5vw, 29px); line-height: 1.3; overflow-wrap: anywhere; }
+    .account { margin: 0 0 12px; font-size: 16px; overflow-wrap: anywhere; word-break: normal; color: #f4f5f9; }
     p { color: #9297a7; line-height: 1.7; }
     button { margin-top: 22px; border: 0; border-radius: 12px; padding: 13px 20px; background: linear-gradient(135deg,#ffab3d,#f59e0b); color: #111; font: inherit; font-weight: 800; cursor: pointer; }
     .error { color: #ff7388; }
@@ -22,7 +23,8 @@
 <body>
   <main>
     <div class="mark" aria-hidden="true">✦</div>
-    <h1 id="welcome">Your workspace</h1>
+    <h1 id="welcome">Welcome</h1>
+    <p id="account" class="account" dir="auto"></p>
     <p id="details">Loading your account…</p>
     <button id="logout" type="button">Sign Out</button>
   </main>
@@ -34,7 +36,7 @@
         window.location.replace("/");
         return;
       }
-      document.querySelector("#welcome").textContent = "Welcome, " + data.user.identifier;
+      document.querySelector("#account").textContent = data.user.identifier;
       document.querySelector("#details").textContent = "You are signed in. Your account session is active.";
     }
     document.querySelector("#logout").addEventListener("click", async () => {

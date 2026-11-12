@@ -491,3 +491,8 @@ svg { display: block; }
 .google-signin { display: block; margin-top: 18px; padding: 12px; border: 1px solid var(--line); border-radius: 12px; text-align: center; color: var(--text); text-decoration: none; font-size: 14px; touch-action: manipulation; }
 .google-signin:hover { background: rgba(255,255,255,.08); }
 .google-signin:focus-visible { outline: 2px solid var(--lamp-accent); outline-offset: 3px; }
+
+/* iOS zooms focused inputs smaller than 16px. Keep pinch zoom available. */
+@media (max-width: 768px) {
+  .field input { font-size: 16px; }
+}
