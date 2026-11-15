@@ -496,3 +496,6 @@ svg { display: block; }
 @media (max-width: 768px) {
   .field input { font-size: 16px; }
 }
+
+/* Hide unavailable OAuth entry in the dedicated Maskkan deployment. */
+.google-signin[hidden] { display: none !important; }
