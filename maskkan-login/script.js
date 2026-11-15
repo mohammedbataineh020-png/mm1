@@ -300,3 +300,14 @@ $("#againBtn").addEventListener("click", () => {
     })
     .fromTo(formView, { autoAlpha: 0, y: 12 }, { autoAlpha: 1, y: 0, duration: 0.45, ease: "power3.out" });
 });
+/* Only offer Google sign-in when this deployment has working OAuth settings. */
+fetch('/api/maskkan/config', {credentials:'same-origin'})
+ .then(response=>response.ok?response.json():Promise.reject(new Error('config unavailable')))
+ .then(config=>{
+   const button=document.querySelector('.google-signin');
+   if(button && !config.googleEnabled)button.hidden=true;
+ })
+ .catch(()=>{
+   const button=document.querySelector('.google-signin');
+   if(button)button.hidden=true;
+ });
