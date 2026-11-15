@@ -200,6 +200,14 @@ db.exec(`
   status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','approved','rejected')),
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
  );
+ CREATE TABLE IF NOT EXISTS maskkan_images (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  property_id INTEGER NOT NULL REFERENCES maskkan_properties(id) ON DELETE CASCADE,
+  mime TEXT NOT NULL CHECK (mime IN ('image/jpeg','image/png','image/webp')),
+  data BLOB NOT NULL,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+ );
+ CREATE INDEX IF NOT EXISTS maskkan_images_property_idx ON maskkan_images(property_id,id);
  CREATE TABLE IF NOT EXISTS maskkan_favorites (
   user_id INTEGER NOT NULL REFERENCES users(id),
   property_id INTEGER NOT NULL REFERENCES maskkan_properties(id) ON DELETE CASCADE,
@@ -245,7 +253,7 @@ const maskkanAdmin = (req,res,next) =>
   process.env.MASKKAN_ADMIN_IDENTIFIER &&
   req.session.user?.identifier === process.env.MASKKAN_ADMIN_IDENTIFIER.toLowerCase()
   ? next() : res.status(403).json({error:'ليس لديك صلاحية الإدارة'});
-const maskkanFields='id,title,mode,property_type,city,district,price,area_sqm,bedrooms,bathrooms,description,status,created_at';
+const maskkanFields='maskkan_properties.id,title,mode,property_type,city,district,price,area_sqm,bedrooms,bathrooms,description,status,created_at,(SELECT id FROM maskkan_images WHERE property_id=maskkan_properties.id ORDER BY id LIMIT 1) AS cover_image_id';
 app.get('/api/maskkan/properties', (req,res) => {
  const clauses=["status='approved'"], args=[];
  for (const key of ['mode','city','property_type']) {
@@ -308,6 +316,57 @@ app.patch('/api/maskkan/admin/properties/:id',maskkanSameOrigin,maskkanLimiter,m
  if(!result.changes)return res.status(404).json({error:'الإعلان غير معلق'});
  res.json({status:req.body.status});
 });
+
+const maskkanImageMime = ['image/jpeg','image/png','image/webp'];
+const maskkanRawImage = express.raw({type:maskkanImageMime,limit:'2mb'});
+function maskkanValidImage(data, mime) {
+ if(!Buffer.isBuffer(data) || data.length<40 || data.length>2*1024*1024)return false;
+ if(mime==='image/jpeg')return data[0]===0xff && data[1]===0xd8 && data[2]===0xff && data[data.length-2]===0xff && data[data.length-1]===0xd9;
+ if(mime==='image/png')return data.subarray(0,8).equals(Buffer.from([137,80,78,71,13,10,26,10]));
+ if(mime==='image/webp')return data.toString('ascii',0,4)==='RIFF' && data.toString('ascii',8,12)==='WEBP';
+ return false;
+}
+app.post('/api/maskkan/properties/:id/images',maskkanSameOrigin,maskkanAuth,maskkanLimiter,maskkanRawImage,(req,res)=>{
+ const property=db.prepare('SELECT owner_id FROM maskkan_properties WHERE id=?').get(req.params.id);
+ if(!property)return res.status(404).json({error:'العقار غير موجود'});
+ if(property.owner_id!==req.session.user.id)return res.status(403).json({error:'ليس لديك صلاحية'});
+ const mime=req.get('Content-Type')?.split(';')[0].trim().toLowerCase();
+ if(!maskkanImageMime.includes(mime)||!maskkanValidImage(req.body,mime))return res.status(400).json({error:'أرسل صورة JPEG أو PNG أو WebP صالحة بحجم أقصى 2MB'});
+ const upload=db.transaction(()=>{
+   if(db.prepare('SELECT COUNT(*) AS count FROM maskkan_images WHERE property_id=?').get(req.params.id).count>=5)return null;
+   const insert=db.prepare('INSERT INTO maskkan_images(property_id,mime,data) VALUES (?,?,?)').run(req.params.id,mime,req.body);
+   db.prepare("UPDATE maskkan_properties SET status='pending' WHERE id=?").run(req.params.id);
+   return Number(insert.lastInsertRowid);
+ });
+ const id=upload();
+ if(id===null)return res.status(409).json({error:'الحد الأقصى خمس صور لكل عقار'});
+ res.status(201).json({id,status:'pending'});
+});
+app.get('/api/maskkan/properties/:id/images',(req,res)=>{
+ const property=db.prepare('SELECT owner_id,status FROM maskkan_properties WHERE id=?').get(req.params.id);
+ if(!property || (property.status!=='approved' && req.session.user?.id!==property.owner_id && req.session.user?.identifier!==process.env.MASKKAN_ADMIN_IDENTIFIER?.toLowerCase()))return res.status(404).json({error:'العقار غير متاح'});
+ const images=db.prepare('SELECT id,mime FROM maskkan_images WHERE property_id=? ORDER BY id').all(req.params.id);
+ res.json({images:images.map(x=>({id:x.id,mime:x.mime,url:'/api/maskkan/images/'+x.id}))});
+});
+app.get('/api/maskkan/images/:imageId',(req,res)=>{
+ const image=db.prepare('SELECT i.data,i.mime,p.owner_id,p.status FROM maskkan_images i JOIN maskkan_properties p ON p.id=i.property_id WHERE i.id=?').get(req.params.imageId);
+ if(!image || (image.status!=='approved' && req.session.user?.id!==image.owner_id && req.session.user?.identifier!==process.env.MASKKAN_ADMIN_IDENTIFIER?.toLowerCase()))return res.status(404).end();
+ res.set({'Content-Type':image.mime,'Cache-Control':'private, no-store','X-Content-Type-Options':'nosniff'});
+ res.send(image.data);
+});
+app.delete('/api/maskkan/properties/:id/images/:imageId',maskkanSameOrigin,maskkanAuth,maskkanLimiter,(req,res)=>{
+ const property=db.prepare('SELECT owner_id FROM maskkan_properties WHERE id=?').get(req.params.id);
+ if(!property)return res.status(404).json({error:'العقار غير موجود'});
+ if(property.owner_id!==req.session.user.id)return res.status(403).json({error:'ليس لديك صلاحية'});
+ const changed=db.transaction(()=>{
+  const result=db.prepare('DELETE FROM maskkan_images WHERE id=? AND property_id=?').run(req.params.imageId,req.params.id);
+  if(result.changes)db.prepare("UPDATE maskkan_properties SET status='pending' WHERE id=?").run(req.params.id);
+  return result.changes;
+ })();
+ if(!changed)return res.status(404).json({error:'الصورة غير موجودة'});
+ res.status(204).end();
+});
+
 app.get('/maskkan', (req,res) => res.sendFile(path.join(__dirname,'maskkan-demo','index.html')));
 
 app.use((req, res) => res.status(404).json({ error: "Page not found." }));
