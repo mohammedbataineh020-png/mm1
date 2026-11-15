@@ -23,3 +23,8 @@ test('مسّكن: listing form includes rental and sale modes',()=>{
  assert.match(html,/<option value="rent">للإيجار<\/option>/);
  assert.match(html,/<option value="sale">للبيع<\/option>/);
 });
+
+test('مسّكن: full-stack first load contains no fabricated property listings',()=>{
+ assert.match(html,/const homes=\[\]/);
+ assert.match(html,/name="robots" content="noindex,nofollow"/);
+});
