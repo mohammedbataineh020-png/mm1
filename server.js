@@ -166,6 +166,11 @@ app.get("/dashboard", requireAuth, (req, res) => {
   res.sendFile(path.join(__dirname, "dashboard.html"));
 });
 
+// On the standalone Maskkan staging service, open the property website by default.
+// The original mm1 project remains available on the main branch and its own service.
+if (process.env.MASKKAN_STAGE === "true") {
+ app.get(["/","/index.html"],(req,res)=>res.redirect(302,"/maskkan"));
+}
 // Serve only the intended public assets. Never expose the repository root,
 // archives, tests, or SQLite files, including a custom DATA_DIR.
 for (const [url, filename] of Object.entries({
@@ -174,6 +179,7 @@ for (const [url, filename] of Object.entries({
   "/script.js": "script.js",
   "/styles.css": "styles.css"
 })) {
+  if (process.env.MASKKAN_STAGE === "true" && (url === "/" || url === "/index.html")) continue;
   app.get(url, (req, res) => res.sendFile(path.join(__dirname, filename), {
     maxAge: NODE_ENV === "production" ? "1h" : 0,
     dotfiles: "deny"
