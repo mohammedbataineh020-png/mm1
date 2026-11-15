@@ -25,6 +25,10 @@ test('مسّكن: protected creation, approval, update, and favorites',async t=>
  assert.equal(homepage.status,302);
  assert.equal(homepage.headers.get('location'),'/maskkan');
  assert.equal((await request('/maskkan')).status,200);
+ const settings=await request('/api/maskkan/config');
+ assert.equal(settings.status,200);
+ assert.equal((await settings.json()).googleEnabled,false);
+
  const lampPage=await request('/maskkan/login');
  assert.equal(lampPage.status,200);
  assert.match(await lampPage.text(),/Interactive Lamp|lampWrap/);
@@ -32,6 +36,9 @@ test('مسّكن: protected creation, approval, update, and favorites',async t=>
  assert.equal(lampScript.status,200);
  assert.match(await lampScript.text(),/location\.assign\("\/maskkan"\)/);
  assert.equal((await request('/maskkan/login/styles.css')).status,200);
+ const loginStyles=await (await request('/maskkan/login/styles.css')).text();
+ assert.match(loginStyles,/google-signin\\[hidden\\]/);
+
 
  assert.equal((await request('/api/maskkan/properties',json('POST',sample))).status,401);
  assert.equal((await request('/api/maskkan/properties',json('POST',sample,owner,'https://evil.example'))).status,403);
