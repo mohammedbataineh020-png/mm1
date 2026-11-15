@@ -383,6 +383,11 @@ app.delete('/api/maskkan/properties/:id/images/:imageId',maskkanSameOrigin,maskk
  res.status(204).end();
 });
 
+// Preserved interactive lamp login, sharing the same authentication API and sessions.
+app.get('/maskkan/login', (req,res) => res.sendFile(path.join(__dirname,'maskkan-login','index.html')));
+for (const asset of ['styles.css','script.js']) {
+ app.get('/maskkan/login/'+asset,(req,res)=>res.sendFile(path.join(__dirname,'maskkan-login',asset),{dotfiles:'deny'}));
+}
 app.get('/maskkan', (req,res) => res.sendFile(path.join(__dirname,'maskkan-demo','index.html')));
 
 app.use((req, res) => res.status(404).json({ error: "Page not found." }));
