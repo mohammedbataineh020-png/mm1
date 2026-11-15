@@ -45,6 +45,15 @@ test('مسّكن: protected creation, approval, update, and favorites',async t=>
  r=await request('/api/maskkan/admin/pending',{headers:{Cookie:admin}});assert.equal((await r.json()).properties.length,1);
  r=await request('/api/maskkan/admin/properties/'+id,json('PATCH',{status:'approved'},admin));assert.equal(r.status,200);
  assert.equal((await request('/api/maskkan/images/'+imageId)).status,200);
+
+ assert.equal((await(await request('/api/maskkan/properties?min_price=200&max_price=260')).json()).total,1);
+ assert.equal((await(await request('/api/maskkan/properties?min_price=300')).json()).total,0);
+ assert.equal((await(await request('/api/maskkan/properties?city=عمّان')).json()).total,0);
+ assert.equal((await request('/api/maskkan/properties?min_price=500&max_price=100')).status,400);
+ assert.equal((await request('/api/maskkan/properties?page=-1')).status,400);
+ assert.equal((await request('/api/maskkan/properties?limit=1000')).status,400);
+ const sorted=await request('/api/maskkan/properties?sort=price_asc&limit=1');
+ assert.equal((await sorted.json()).properties.length,1);
  const listed=(await(await request('/api/maskkan/properties')).json()).properties;assert.equal(listed.length,1);assert.equal(listed[0].phone,undefined);
  const details=(await(await request('/api/maskkan/properties/'+id)).json()).property;assert.equal(details.phone,'0791234567');
  assert.equal((await request('/api/maskkan/favorites/'+id,json('POST',{},owner))).status,204);
