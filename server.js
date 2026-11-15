@@ -251,7 +251,9 @@ const maskkanLimiter = rateLimit({windowMs:15*60*1000,limit:30,standardHeaders:'
 const maskkanAuth = (req,res,next) => req.session.user ? next() : res.status(401).json({error:'سجل الدخول أولًا'});
 const maskkanAdmin = (req,res,next) =>
   process.env.MASKKAN_ADMIN_IDENTIFIER &&
-  req.session.user?.identifier === process.env.MASKKAN_ADMIN_IDENTIFIER.toLowerCase()
+  process.env.MASKKAN_ADMIN_USER_ID &&
+  req.session.user?.identifier === process.env.MASKKAN_ADMIN_IDENTIFIER.trim().toLowerCase() &&
+  req.session.user?.id === Number(process.env.MASKKAN_ADMIN_USER_ID)
   ? next() : res.status(403).json({error:'ليس لديك صلاحية الإدارة'});
 const maskkanFields='maskkan_properties.id,title,mode,property_type,city,district,price,area_sqm,bedrooms,bathrooms,description,status,created_at,(SELECT id FROM maskkan_images WHERE property_id=maskkan_properties.id ORDER BY id LIMIT 1) AS cover_image_id';
 app.get('/api/maskkan/properties', (req,res) => {
