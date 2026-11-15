@@ -180,6 +180,136 @@ for (const [url, filename] of Object.entries({
   }));
 }
 
+
+// --- مسّكن: real-estate MVP. Reuses the existing mm1 users and sessions. ---
+db.exec(`
+ CREATE TABLE IF NOT EXISTS maskkan_properties (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  owner_id INTEGER NOT NULL REFERENCES users(id),
+  title TEXT NOT NULL,
+  mode TEXT NOT NULL CHECK (mode IN ('rent','sale')),
+  property_type TEXT NOT NULL,
+  city TEXT NOT NULL,
+  district TEXT NOT NULL,
+  price INTEGER NOT NULL CHECK (price > 0),
+  area_sqm INTEGER NOT NULL CHECK (area_sqm > 0),
+  bedrooms INTEGER NOT NULL DEFAULT 0,
+  bathrooms INTEGER NOT NULL DEFAULT 0,
+  description TEXT NOT NULL DEFAULT '',
+  phone TEXT NOT NULL DEFAULT '',
+  status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','approved','rejected')),
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+ );
+ CREATE TABLE IF NOT EXISTS maskkan_favorites (
+  user_id INTEGER NOT NULL REFERENCES users(id),
+  property_id INTEGER NOT NULL REFERENCES maskkan_properties(id) ON DELETE CASCADE,
+  PRIMARY KEY (user_id, property_id)
+ );
+ CREATE INDEX IF NOT EXISTS maskkan_property_idx ON maskkan_properties (status,mode,city,property_type,price);
+`);
+const maskkanCities = ['عمّان','إربد','الزرقاء','المفرق','جرش','عجلون','البلقاء','مادبا','الكرك','الطفيلة','معان','العقبة'];
+const maskkanTypes = ['شقة','فيلا','بيت','أرض','محل','مكتب','مزرعة','استوديو'];
+const maskkanClean = (value, max) => String(value ?? '').trim().slice(0,max);
+function maskkanParse(body) {
+  const b = body || {};
+  const p = {
+    title:maskkanClean(b.title,110),mode:maskkanClean(b.mode,10),
+    property_type:maskkanClean(b.property_type,25),
+    city:maskkanClean(b.city,30),district:maskkanClean(b.district,80),
+    price:Number(b.price),area_sqm:Number(b.area_sqm),
+    bedrooms:Number(b.bedrooms ?? 0),bathrooms:Number(b.bathrooms ?? 0),
+    description:maskkanClean(b.description,2000),phone:maskkanClean(b.phone,15)
+  };
+  if (p.title.length<8 || !['rent','sale'].includes(p.mode) ||
+      !maskkanTypes.includes(p.property_type) || !maskkanCities.includes(p.city) ||
+      p.district.length<2) return null;
+  if (![p.price,p.area_sqm,p.bedrooms,p.bathrooms].every(Number.isSafeInteger) ||
+      p.price<1 || p.price>100000000 || p.area_sqm<1 || p.area_sqm>1000000 ||
+      p.bedrooms<0 || p.bedrooms>50 || p.bathrooms<0 || p.bathrooms>50) return null;
+  if (p.phone && !/^07[789]\d{7}$/.test(p.phone)) return null;
+  return p;
+}
+function maskkanSameOrigin(req,res,next) {
+  if (['GET','HEAD','OPTIONS'].includes(req.method)) return next();
+  const origin = req.get('Origin');
+  const expected = req.get('X-Forwarded-Host') || req.get('Host');
+  if (!origin || !expected) return res.status(403).json({error:'مصدر الطلب مطلوب'});
+  try {
+    if (new URL(origin).host !== expected) return res.status(403).json({error:'مصدر غير مصرح'});
+  } catch { return res.status(403).json({error:'مصدر غير صالح'}); }
+  next();
+}
+const maskkanLimiter = rateLimit({windowMs:15*60*1000,limit:30,standardHeaders:'draft-8',legacyHeaders:false});
+const maskkanAuth = (req,res,next) => req.session.user ? next() : res.status(401).json({error:'سجل الدخول أولًا'});
+const maskkanAdmin = (req,res,next) =>
+  process.env.MASKKAN_ADMIN_IDENTIFIER &&
+  req.session.user?.identifier === process.env.MASKKAN_ADMIN_IDENTIFIER.toLowerCase()
+  ? next() : res.status(403).json({error:'ليس لديك صلاحية الإدارة'});
+const maskkanFields='id,title,mode,property_type,city,district,price,area_sqm,bedrooms,bathrooms,description,status,created_at';
+app.get('/api/maskkan/properties', (req,res) => {
+ const clauses=["status='approved'"], args=[];
+ for (const key of ['mode','city','property_type']) {
+   if(req.query[key]){clauses.push(key+'=?');args.push(maskkanClean(req.query[key],30));}
+ }
+ const items=db.prepare('SELECT '+maskkanFields+' FROM maskkan_properties WHERE '+clauses.join(' AND ')+' ORDER BY id DESC LIMIT 100').all(...args);
+ res.json({properties:items});
+});
+app.get('/api/maskkan/properties/:id', (req,res) => {
+ const item=db.prepare('SELECT '+maskkanFields+',phone FROM maskkan_properties WHERE id=? AND status=?').get(req.params.id,'approved');
+ if(!item)return res.status(404).json({error:'العقار غير متاح'});
+ res.json({property:item});
+});
+app.get('/api/maskkan/mine',maskkanAuth,(req,res)=>{
+ const items=db.prepare('SELECT '+maskkanFields+',phone FROM maskkan_properties WHERE owner_id=? ORDER BY id DESC').all(req.session.user.id);
+ res.json({properties:items});
+});
+app.post('/api/maskkan/properties',maskkanSameOrigin,maskkanLimiter,maskkanAuth,(req,res)=>{
+ const p=maskkanParse(req.body);
+ if(!p)return res.status(400).json({error:'راجع معلومات العقار'});
+ if(p.phone && req.body.contactConsent!==true)return res.status(400).json({error:'يجب الموافقة على نشر رقم الاتصال'});
+ const columns=Object.keys(p);
+ const result=db.prepare('INSERT INTO maskkan_properties(owner_id,'+columns.join(',')+') VALUES (?,'+columns.map(()=>'?').join(',')+')').run(req.session.user.id,...Object.values(p));
+ res.status(201).json({id:Number(result.lastInsertRowid),status:'pending'});
+});
+app.put('/api/maskkan/properties/:id',maskkanSameOrigin,maskkanLimiter,maskkanAuth,(req,res)=>{
+ const previous=db.prepare('SELECT owner_id FROM maskkan_properties WHERE id=?').get(req.params.id);
+ if(!previous)return res.status(404).json({error:'العقار غير موجود'});
+ if(previous.owner_id!==req.session.user.id)return res.status(403).json({error:'ليس لديك صلاحية'});
+ const p=maskkanParse(req.body);
+ if(!p)return res.status(400).json({error:'راجع معلومات العقار'});
+ if(p.phone && req.body.contactConsent!==true)return res.status(400).json({error:'يجب الموافقة على نشر رقم الاتصال'});
+ db.prepare('UPDATE maskkan_properties SET '+Object.keys(p).map(k=>k+'=?').join(',')+",status='pending' WHERE id=?").run(...Object.values(p),req.params.id);
+ res.json({status:'pending'});
+});
+app.delete('/api/maskkan/properties/:id',maskkanSameOrigin,maskkanLimiter,maskkanAuth,(req,res)=>{
+ const result=db.prepare('DELETE FROM maskkan_properties WHERE id=? AND owner_id=?').run(req.params.id,req.session.user.id);
+ if(!result.changes)return res.status(404).json({error:'الإعلان غير موجود في حسابك'});
+ res.status(204).end();
+});
+app.get('/api/maskkan/favorites',maskkanAuth,(req,res)=>{
+ const rows=db.prepare("SELECT f.property_id AS id FROM maskkan_favorites f JOIN maskkan_properties p ON p.id=f.property_id WHERE f.user_id=? AND p.status='approved'").all(req.session.user.id);
+ res.json({ids:rows.map(row=>row.id)});
+});
+app.post('/api/maskkan/favorites/:id',maskkanSameOrigin,maskkanLimiter,maskkanAuth,(req,res)=>{
+ if(!db.prepare("SELECT id FROM maskkan_properties WHERE id=? AND status='approved'").get(req.params.id))return res.status(404).json({error:'العقار غير متاح'});
+ db.prepare('INSERT OR IGNORE INTO maskkan_favorites(user_id,property_id) VALUES (?,?)').run(req.session.user.id,req.params.id);
+ res.status(204).end();
+});
+app.delete('/api/maskkan/favorites/:id',maskkanSameOrigin,maskkanLimiter,maskkanAuth,(req,res)=>{
+ db.prepare('DELETE FROM maskkan_favorites WHERE user_id=? AND property_id=?').run(req.session.user.id,req.params.id);
+ res.status(204).end();
+});
+app.get('/api/maskkan/admin/pending',maskkanAuth,maskkanAdmin,(req,res)=>{
+ res.json({properties:db.prepare("SELECT "+maskkanFields+" FROM maskkan_properties WHERE status='pending' ORDER BY id DESC").all()});
+});
+app.patch('/api/maskkan/admin/properties/:id',maskkanSameOrigin,maskkanLimiter,maskkanAuth,maskkanAdmin,(req,res)=>{
+ if(!['approved','rejected'].includes(req.body?.status))return res.status(400).json({error:'حالة غير صحيحة'});
+ const result=db.prepare("UPDATE maskkan_properties SET status=? WHERE id=? AND status='pending'").run(req.body.status,req.params.id);
+ if(!result.changes)return res.status(404).json({error:'الإعلان غير معلق'});
+ res.json({status:req.body.status});
+});
+app.get('/maskkan', (req,res) => res.sendFile(path.join(__dirname,'maskkan-demo','index.html')));
+
 app.use((req, res) => res.status(404).json({ error: "Page not found." }));
 
 app.use((error, req, res, next) => {
