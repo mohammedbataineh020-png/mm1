@@ -43,7 +43,49 @@ function maskkanOpenAccount(){mkShow('mkAccount')}
 function maskkanOpenAdd(){if(!mkUser)return maskkanOpenAccount();const f=document.getElementById('mkAddForm');f.reset();f.elements.editId.value='';document.getElementById('mkExistingPhotos').innerHTML='';document.getElementById('mkAddTitle').textContent='أضف عقارك';mkMessage('mkAddMsg','');maskkanClose('mkAccount');maskkanClose('mkMine');mkShow('mkAdd')}
 async function maskkanLogout(){try{await mkApi('/api/auth/logout',{method:'POST'});maskkanClose('mkAccount');await mkInit()}catch(e){mkMessage('mkAuthMsg',e.message)}}
 document.getElementById('mkAuthForm').addEventListener('submit',async e=>{e.preventDefault();const action=e.submitter?.value||'login',f=new FormData(e.target);try{await mkApi('/api/auth/'+action,{method:'POST',body:JSON.stringify({identifier:f.get('identifier'),password:f.get('password')})});e.target.reset();await mkInit();mkMessage('mkAuthMsg','تم الدخول بنجاح')}catch(err){mkMessage('mkAuthMsg',err.message)}});
-document.getElementById('mkAddForm').addEventListener('submit',async e=>{e.preventDefault();const f=new FormData(e.target),d=Object.fromEntries(f.entries()),editId=d.editId;delete d.editId;d.contactConsent=!!f.get('contactConsent');for(const k of ['price','area_sqm','bedrooms','bathrooms'])d[k]=Number(d[k]);try{await mkApi(editId?'/api/maskkan/properties/'+editId:'/api/maskkan/properties',{method:editId?'PUT':'POST',body:JSON.stringify(d)});maskkanClose('mkAdd');await maskkanOpenMine()}catch(err){mkMessage('mkAddMsg',err.message)}});
+
+async function mkPrepareImage(file){
+ if(file.size>15*1024*1024)throw Error('الصورة كبيرة جدًا، اختر صورة أقل من 15MB');
+ const url=URL.createObjectURL(file);
+ try{
+  const img=new Image();img.src=url;
+  await new Promise((resolve,reject)=>{img.onload=resolve;img.onerror=()=>reject(Error('تعذر قراءة الصورة: '+file.name))});
+  const ratio=Math.min(1,1280/Math.max(img.naturalWidth,img.naturalHeight));
+  const canvas=document.createElement('canvas');canvas.width=Math.round(img.naturalWidth*ratio);canvas.height=Math.round(img.naturalHeight*ratio);
+  if(!canvas.width||!canvas.height)throw Error('أبعاد الصورة غير صالحة');
+  canvas.getContext('2d').drawImage(img,0,0,canvas.width,canvas.height);
+  const blob=await new Promise(resolve=>canvas.toBlob(resolve,'image/jpeg',0.78));
+  if(!blob||blob.size>2*1024*1024)throw Error('تعذر ضغط الصورة، جرّب صورة أصغر');
+  return blob;
+ }finally{URL.revokeObjectURL(url)}
+}
+async function mkUploadPhotos(id,files){
+ for(const file of files){
+  const blob=await mkPrepareImage(file);
+  const response=await fetch('/api/maskkan/properties/'+id+'/images',{method:'POST',headers:{'Content-Type':'image/jpeg'},credentials:'same-origin',body:blob});
+  const data=await response.json().catch(()=>({}));
+  if(!response.ok)throw Error(data.error||'تعذر رفع الصورة');
+ }
+}
+async function mkRefreshPhotos(id){
+ const images=(await mkApi('/api/maskkan/properties/'+id+'/images')).images;
+ document.getElementById('mkExistingPhotos').innerHTML=images.length?'<b>الصور المرفوعة</b><div class="mk-images">'+images.map(im=>'<div><img src="'+im.url+'" loading="lazy" alt="صورة العقار"><button type="button" class="mk-control" data-mkremovephoto="'+im.id+'" data-pid="'+id+'">حذف الصورة</button></div>').join('')+'</div>':'لا توجد صور مرفوعة بعد';
+}
+document.getElementById('mkAddForm').addEventListener('submit',async e=>{
+ e.preventDefault();const f=new FormData(e.target),d=Object.fromEntries(f.entries()),editId=d.editId;
+ const files=Array.from(e.target.elements.photos.files);
+ delete d.editId;delete d.photos;d.contactConsent=!!f.get('contactConsent');
+ for(const k of ['price','area_sqm','bedrooms','bathrooms'])d[k]=Number(d[k]);
+ const submit=e.target.querySelector('button[type=submit]');submit.disabled=true;
+ try{
+  if(files.length>5)throw Error('الحد الأقصى خمس صور لكل إعلان');
+  const result=await mkApi(editId?'/api/maskkan/properties/'+editId:'/api/maskkan/properties',{method:editId?'PUT':'POST',body:JSON.stringify(d)});
+  try{if(files.length)await mkUploadPhotos(editId||result.id,files)}
+  catch(err){mkMessage('mkAddMsg','تم حفظ الإعلان، ولكن بعض الصور لم تُرفع: '+err.message);return}
+  maskkanClose('mkAdd');await maskkanOpenMine();await mkInit();
+ }catch(err){mkMessage('mkAddMsg',err.message)}finally{submit.disabled=false}
+});
+
 async function maskkanOpenMine(){if(!mkUser)return maskkanOpenAccount();try{const items=(await mkApi('/api/maskkan/mine')).properties;document.getElementById('mkMyItems').innerHTML=items.length?items.map(p=>'<div class="mk-status"><b>'+mkEsc(p.title)+'</b> · '+(p.status==='pending'?'بانتظار المراجعة':p.status==='approved'?'منشور':'مرفوض')+'<p><button class="mk-control" data-mkedit="'+p.id+'">تعديل</button> <button class="mk-control" data-mkdelete="'+p.id+'">حذف</button></p></div>').join(''):'لا توجد إعلانات بعد';window.mkMineItems=items;const admin=await mkApi('/api/maskkan/admin/pending').catch(()=>null);document.getElementById('mkAdminHeader').hidden=!admin;document.getElementById('mkPending').innerHTML=admin?admin.properties.map(p=>'<div class="mk-status"><b>'+mkEsc(p.title)+'</b> · '+mkEsc(p.city)+' <button class="mk-control" data-mkreview="'+p.id+'" data-state="approved">موافقة</button> <button class="mk-control" data-mkreview="'+p.id+'" data-state="rejected">رفض</button></div>').join(''):'';maskkanClose('mkAccount');mkShow('mkMine')}catch(e){alert(e.message)}}
 document.addEventListener('click',async e=>{const edit=e.target.closest('[data-mkedit]'),del=e.target.closest('[data-mkdelete]'),review=e.target.closest('[data-mkreview]'),removePhoto=e.target.closest('[data-mkremovephoto]');if(removePhoto){if(!confirm('حذف هذه الصورة؟'))return;try{await mkApi('/api/maskkan/properties/'+removePhoto.dataset.pid+'/images/'+removePhoto.dataset.mkremovephoto,{method:'DELETE'});await mkRefreshPhotos(removePhoto.dataset.pid)}catch(err){alert(err.message)}return}if(edit){const p=(window.mkMineItems||[]).find(x=>x.id===Number(edit.dataset.mkedit));if(!p)return;maskkanOpenAdd();const f=document.getElementById('mkAddForm');f.elements.editId.value=p.id;for(const k of ['title','mode','property_type','city','district','price','area_sqm','bedrooms','bathrooms','description','phone'])f.elements[k].value=p[k]??'';f.elements.contactConsent.checked=!!p.phone;document.getElementById('mkAddTitle').textContent='تعديل إعلان';mkRefreshPhotos(p.id).catch(err=>mkMessage('mkAddMsg',err.message));return}if(del){if(!confirm('حذف الإعلان نهائيًا؟'))return;try{await mkApi('/api/maskkan/properties/'+del.dataset.mkdelete,{method:'DELETE'});await maskkanOpenMine();await mkInit()}catch(err){alert(err.message)}return}if(review){try{await mkApi('/api/maskkan/admin/properties/'+review.dataset.mkreview,{method:'PATCH',body:JSON.stringify({status:review.dataset.state})});await maskkanOpenMine();await mkInit()}catch(err){alert(err.message)}}});
 mkInit();
