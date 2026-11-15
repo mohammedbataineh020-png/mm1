@@ -10,7 +10,7 @@ if(h.isLive){
  const property=result[0].property,images=result[1].images;
  const el=document.createElement('div');el.style.marginTop='14px';
  const gallery=images.map(im=>'<img loading="lazy" style="width:100%;max-height:260px;object-fit:cover;border-radius:12px;margin-top:8px" src="'+im.url+'" alt="صورة العقار">').join('');
- el.innerHTML=gallery+'<p>'+mkEsc(property.description||'')+'</p>'+(property.phone?'<a class="pill" href="tel:'+encodeURIComponent(property.phone)+'">اتصل بالمالك: '+mkEsc(property.phone)+'</a>':'<p>لم يحدد المعلن رقمًا للتواصل.</p>');
+ el.innerHTML=gallery+'<p>'+mkEsc(property.description||'')+'</p>'+(property.mode==='rent'?'<p>التأثيث: '+(property.furnished?'مفروش':'غير مفروش')+' | التأمين: '+Number(property.deposit||0).toLocaleString('en-US')+' د.أ</p>':'')+(property.phone?'<a class="pill" href="tel:'+encodeURIComponent(property.phone)+'">اتصل بالمالك: '+mkEsc(property.phone)+'</a>':'<p>لم يحدد المعلن رقمًا للتواصل.</p>');
  $('detail').appendChild(el);
  const favoriteBtn=document.createElement('button');
  favoriteBtn.className='mk-control';
@@ -51,6 +51,11 @@ if(h.isLive){
 <select name="city"><option>إربد</option><option>عمّان</option><option>الزرقاء</option><option>المفرق</option><option>جرش</option><option>عجلون</option><option>البلقاء</option><option>مادبا</option><option>الكرك</option><option>الطفيلة</option><option>معان</option><option>العقبة</option></select>
 <input name="district" placeholder="الحي أو المنطقة" required minlength="2" maxlength="80">
 <input name="price" type="number" min="1" max="100000000" placeholder="السعر بالدينار" required>
+<div class="wide" id="mkRentFields" style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px">
+<label>فترة الإيجار<select name="rent_period"><option value="monthly">شهري</option><option value="yearly">سنوي</option></select></label>
+<label>التأمين (د.أ)<input name="deposit" type="number" min="0" max="1000000" value="0" required></label>
+<label class="wide"><input type="checkbox" name="furnished" style="width:auto"> العقار مفروش</label>
+</div>
 <input name="area_sqm" type="number" min="1" max="1000000" placeholder="المساحة بالمتر المربع" required>
 <input name="bedrooms" type="number" min="0" max="50" value="0" placeholder="الغرف" required>
 <input name="bathrooms" type="number" min="0" max="50" value="0" placeholder="الحمامات" required>
@@ -84,7 +89,7 @@ async function mkLoadListings(){
   document.getElementById('empty').textContent='لا توجد عقارات مطابقة لبحثك حاليًا.';
   homes.splice(0,homes.length,...r.properties.map(item=>({
    id:item.id,title:item.title,city:item.city,area:item.district,type:item.property_type,
-   deal:item.mode,price:item.price,unit:item.mode==='rent'?'شهريًا':'',size:item.area_sqm,
+   deal:item.mode,price:item.price,unit:item.mode==='rent'?(item.rent_period==='yearly'?'سنويًا':'شهريًا'):'',size:item.area_sqm,
    rooms:item.bedrooms,baths:item.bathrooms,img:'photo-1600607687920-4e2a09cf159d',
    cover_image_id:item.cover_image_id,isLive:true,description:item.description
   })));
@@ -105,7 +110,7 @@ document.getElementById('mkPrev').onclick=()=>{if(mkPage>1){mkPage--;mkLoadListi
 async function mkInit(){try{const a=await mkApi('/api/auth/me');mkUser=a.user;document.getElementById('mkAccountBtn').textContent=mkUser?'لوحة حسابي':'تسجيل الدخول';document.getElementById('mkAuthForm').hidden=!!mkUser;document.getElementById('mkAccountTools').hidden=!mkUser;document.getElementById('mkUserLabel').textContent=mkUser?'مرحبًا '+mkUser.identifier:'سجل الدخول أو أنشئ حسابًا لإضافة العقارات';await mkLoadListings();if(mkUser){mkFav=(await mkApi('/api/maskkan/favorites')).ids}else{mkFav=[]}}catch(e){mkMessage('mkAuthMsg','يجب فتح التطبيق من خادم Node.js لتفعيل الحسابات والإعلانات: '+e.message)}}
 
 function maskkanOpenAccount(){if(!mkUser){window.location.assign('/maskkan/login');return}mkShow('mkAccount')}
-function maskkanOpenAdd(){if(!mkUser)return maskkanOpenAccount();const f=document.getElementById('mkAddForm');f.reset();f.elements.editId.value='';document.getElementById('mkExistingPhotos').innerHTML='';document.getElementById('mkAddTitle').textContent='أضف عقارك';mkMessage('mkAddMsg','');maskkanClose('mkAccount');maskkanClose('mkMine');mkShow('mkAdd')}
+function maskkanOpenAdd(){if(!mkUser)return maskkanOpenAccount();const f=document.getElementById('mkAddForm');f.reset();f.elements.editId.value='';mkSyncRentalFields();document.getElementById('mkExistingPhotos').innerHTML='';document.getElementById('mkAddTitle').textContent='أضف عقارك';mkMessage('mkAddMsg','');maskkanClose('mkAccount');maskkanClose('mkMine');mkShow('mkAdd')}
 async function maskkanLogout(){try{await mkApi('/api/auth/logout',{method:'POST'});maskkanClose('mkAccount');await mkInit()}catch(e){mkMessage('mkAuthMsg',e.message)}}
 document.getElementById('mkAuthForm').addEventListener('submit',async e=>{e.preventDefault();const action=e.submitter?.value||'login',f=new FormData(e.target);try{await mkApi('/api/auth/'+action,{method:'POST',body:JSON.stringify({identifier:f.get('identifier'),password:f.get('password')})});e.target.reset();await mkInit();mkMessage('mkAuthMsg','تم الدخول بنجاح')}catch(err){mkMessage('mkAuthMsg',err.message)}});
 
@@ -136,10 +141,15 @@ async function mkRefreshPhotos(id){
  const images=(await mkApi('/api/maskkan/properties/'+id+'/images')).images;
  document.getElementById('mkExistingPhotos').innerHTML=images.length?'<b>الصور المرفوعة</b><div class="mk-images">'+images.map(im=>'<div><img src="'+im.url+'" loading="lazy" alt="صورة العقار"><button type="button" class="mk-control" data-mkremovephoto="'+im.id+'" data-pid="'+id+'">حذف الصورة</button></div>').join('')+'</div>':'لا توجد صور مرفوعة بعد';
 }
+function mkSyncRentalFields(){
+ const form=document.getElementById('mkAddForm');
+ document.getElementById('mkRentFields').style.display=form.elements.mode.value==='rent'?'grid':'none';
+}
+document.getElementById('mkAddForm').elements.mode.addEventListener('change',mkSyncRentalFields);
 document.getElementById('mkAddForm').addEventListener('submit',async e=>{
  e.preventDefault();const f=new FormData(e.target),d=Object.fromEntries(f.entries()),editId=d.editId;
  const files=Array.from(e.target.elements.photos.files);
- delete d.editId;delete d.photos;d.contactConsent=!!f.get('contactConsent');
+ delete d.editId;delete d.photos;d.contactConsent=!!f.get('contactConsent');d.furnished=!!f.get('furnished');
  for(const k of ['price','area_sqm','bedrooms','bathrooms'])d[k]=Number(d[k]);
  const submit=e.target.querySelector('button[type=submit]');submit.disabled=true;
  try{
@@ -179,7 +189,7 @@ document.addEventListener('click',async e=>{const edit=e.target.closest('[data-m
  if(unfavorite){
   try{await mkApi('/api/maskkan/favorites/'+unfavorite.dataset.mkunfavorite,{method:'DELETE'});await maskkanOpenFavorites()}catch(err){alert(err.message)}return;
  }
-if(removePhoto){if(!confirm('حذف هذه الصورة؟'))return;try{await mkApi('/api/maskkan/properties/'+removePhoto.dataset.pid+'/images/'+removePhoto.dataset.mkremovephoto,{method:'DELETE'});await mkRefreshPhotos(removePhoto.dataset.pid)}catch(err){alert(err.message)}return}if(edit){const p=(window.mkMineItems||[]).find(x=>x.id===Number(edit.dataset.mkedit));if(!p)return;maskkanOpenAdd();const f=document.getElementById('mkAddForm');f.elements.editId.value=p.id;for(const k of ['title','mode','property_type','city','district','price','area_sqm','bedrooms','bathrooms','description','phone'])f.elements[k].value=p[k]??'';f.elements.contactConsent.checked=!!p.phone;document.getElementById('mkAddTitle').textContent='تعديل إعلان';mkRefreshPhotos(p.id).catch(err=>mkMessage('mkAddMsg',err.message));return}if(del){if(!confirm('حذف الإعلان نهائيًا؟'))return;try{await mkApi('/api/maskkan/properties/'+del.dataset.mkdelete,{method:'DELETE'});await maskkanOpenMine();await mkInit()}catch(err){alert(err.message)}return}if(review){try{await mkApi('/api/maskkan/admin/properties/'+review.dataset.mkreview,{method:'PATCH',body:JSON.stringify({status:review.dataset.state})});await maskkanOpenMine();await mkInit()}catch(err){alert(err.message)}}});
+if(removePhoto){if(!confirm('حذف هذه الصورة؟'))return;try{await mkApi('/api/maskkan/properties/'+removePhoto.dataset.pid+'/images/'+removePhoto.dataset.mkremovephoto,{method:'DELETE'});await mkRefreshPhotos(removePhoto.dataset.pid)}catch(err){alert(err.message)}return}if(edit){const p=(window.mkMineItems||[]).find(x=>x.id===Number(edit.dataset.mkedit));if(!p)return;maskkanOpenAdd();const f=document.getElementById('mkAddForm');f.elements.editId.value=p.id;for(const k of ['title','mode','property_type','city','district','price','rent_period','deposit','area_sqm','bedrooms','bathrooms','description','phone'])f.elements[k].value=p[k]??'';f.elements.contactConsent.checked=!!p.phone;f.elements.furnished.checked=!!p.furnished;mkSyncRentalFields();document.getElementById('mkAddTitle').textContent='تعديل إعلان';mkRefreshPhotos(p.id).catch(err=>mkMessage('mkAddMsg',err.message));return}if(del){if(!confirm('حذف الإعلان نهائيًا؟'))return;try{await mkApi('/api/maskkan/properties/'+del.dataset.mkdelete,{method:'DELETE'});await maskkanOpenMine();await mkInit()}catch(err){alert(err.message)}return}if(review){try{await mkApi('/api/maskkan/admin/properties/'+review.dataset.mkreview,{method:'PATCH',body:JSON.stringify({status:review.dataset.state})});await maskkanOpenMine();await mkInit()}catch(err){alert(err.message)}}});
 mkInit();
 </script>
 </body></html>
