@@ -29,6 +29,13 @@ test('مسّكن: protected creation, approval, update, and favorites',async t=>
  const imageUpload=await request('/api/maskkan/properties/'+id+'/images',{method:'POST',headers:{Origin:base,'Content-Type':'image/jpeg',Cookie:owner},body:jpeg});
  assert.equal(imageUpload.status,201);
  const imageId=(await imageUpload.json()).id;
+ const badPhoto=await request('/api/maskkan/properties/'+id+'/images',{method:'POST',headers:{Origin:base,'Content-Type':'image/jpeg',Cookie:owner},body:Buffer.from('invalid-image-content')});
+ assert.equal(badPhoto.status,400);
+ const unauthorizedPhoto=await request('/api/maskkan/properties/'+id+'/images',{method:'POST',headers:{Origin:base,'Content-Type':'image/jpeg',Cookie:admin},body:jpeg});
+ assert.equal(unauthorizedPhoto.status,403);
+ const currentImages=await request('/api/maskkan/properties/'+id+'/images');
+ assert.equal(currentImages.status,404);
+
  assert.equal((await request('/api/maskkan/images/'+imageId)).status,404);
  assert.equal((await request('/api/maskkan/images/'+imageId,{headers:{Cookie:owner}})).status,200);
 
