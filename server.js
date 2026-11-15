@@ -225,6 +225,11 @@ db.exec(`
 if (!db.pragma('table_info(maskkan_properties)').some(col=>col.name==='is_available')) {
  db.exec('ALTER TABLE maskkan_properties ADD COLUMN is_available INTEGER NOT NULL DEFAULT 1 CHECK (is_available IN (0,1))');
 }
+const maskkanExtraColumns = db.pragma('table_info(maskkan_properties)').map(col=>col.name);
+if(!maskkanExtraColumns.includes('rent_period'))db.exec("ALTER TABLE maskkan_properties ADD COLUMN rent_period TEXT NOT NULL DEFAULT 'monthly'");
+if(!maskkanExtraColumns.includes('deposit'))db.exec("ALTER TABLE maskkan_properties ADD COLUMN deposit INTEGER NOT NULL DEFAULT 0");
+if(!maskkanExtraColumns.includes('furnished'))db.exec("ALTER TABLE maskkan_properties ADD COLUMN furnished INTEGER NOT NULL DEFAULT 0");
+
 const maskkanCities = ['عمّان','إربد','الزرقاء','المفرق','جرش','عجلون','البلقاء','مادبا','الكرك','الطفيلة','معان','العقبة'];
 const maskkanTypes = ['شقة','فيلا','بيت','أرض','محل','مكتب','مزرعة','استوديو'];
 const maskkanClean = (value, max) => String(value ?? '').trim().slice(0,max);
@@ -236,7 +241,10 @@ function maskkanParse(body) {
     city:maskkanClean(b.city,30),district:maskkanClean(b.district,80),
     price:Number(b.price),area_sqm:Number(b.area_sqm),
     bedrooms:Number(b.bedrooms ?? 0),bathrooms:Number(b.bathrooms ?? 0),
-    description:maskkanClean(b.description,2000),phone:maskkanClean(b.phone,15)
+    description:maskkanClean(b.description,2000),phone:maskkanClean(b.phone,15),
+    rent_period:b.mode==='rent'?maskkanClean(b.rent_period||'monthly',10):'monthly',
+    deposit:b.mode==='rent'?Number(b.deposit??0):0,
+    furnished:b.mode==='rent'?(b.furnished===true||b.furnished==='true'?1:0):0
   };
   if (p.title.length<8 || !['rent','sale'].includes(p.mode) ||
       !maskkanTypes.includes(p.property_type) || !maskkanCities.includes(p.city) ||
@@ -244,6 +252,7 @@ function maskkanParse(body) {
   if (![p.price,p.area_sqm,p.bedrooms,p.bathrooms].every(Number.isSafeInteger) ||
       p.price<1 || p.price>100000000 || p.area_sqm<1 || p.area_sqm>1000000 ||
       p.bedrooms<0 || p.bedrooms>50 || p.bathrooms<0 || p.bathrooms>50) return null;
+  if(!['monthly','yearly'].includes(p.rent_period) || !Number.isSafeInteger(p.deposit) || p.deposit<0 || p.deposit>1000000)return null;
   if (p.phone && !/^07[789]\d{7}$/.test(p.phone)) return null;
   return p;
 }
@@ -265,7 +274,7 @@ const maskkanAdmin = (req,res,next) =>
   req.session.user?.identifier === process.env.MASKKAN_ADMIN_IDENTIFIER.trim().toLowerCase() &&
   req.session.user?.id === Number(process.env.MASKKAN_ADMIN_USER_ID)
   ? next() : res.status(403).json({error:'ليس لديك صلاحية الإدارة'});
-const maskkanFields='maskkan_properties.id,title,mode,property_type,city,district,price,area_sqm,bedrooms,bathrooms,description,status,is_available,created_at,(SELECT id FROM maskkan_images WHERE property_id=maskkan_properties.id ORDER BY id LIMIT 1) AS cover_image_id';
+const maskkanFields='maskkan_properties.id,title,mode,property_type,city,district,price,area_sqm,bedrooms,bathrooms,description,status,is_available,rent_period,deposit,furnished,created_at,(SELECT id FROM maskkan_images WHERE property_id=maskkan_properties.id ORDER BY id LIMIT 1) AS cover_image_id';
 app.get('/api/maskkan/properties', (req,res) => {
  const clauses=["status='approved'","is_available=1"], args=[];
  for (const key of ['mode','city','property_type']) {
