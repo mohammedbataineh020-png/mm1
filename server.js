@@ -346,13 +346,13 @@ app.post('/api/maskkan/properties/:id/images',maskkanSameOrigin,maskkanAuth,mask
 });
 app.get('/api/maskkan/properties/:id/images',(req,res)=>{
  const property=db.prepare('SELECT owner_id,status FROM maskkan_properties WHERE id=?').get(req.params.id);
- if(!property || (property.status!=='approved' && req.session.user?.id!==property.owner_id && req.session.user?.identifier!==process.env.MASKKAN_ADMIN_IDENTIFIER?.toLowerCase()))return res.status(404).json({error:'العقار غير متاح'});
+ if(!property || (property.status!=='approved' && req.session.user?.id!==property.owner_id && !(req.session.user?.identifier===process.env.MASKKAN_ADMIN_IDENTIFIER?.trim().toLowerCase() && process.env.MASKKAN_ADMIN_USER_ID && req.session.user?.id===Number(process.env.MASKKAN_ADMIN_USER_ID))))return res.status(404).json({error:'العقار غير متاح'});
  const images=db.prepare('SELECT id,mime FROM maskkan_images WHERE property_id=? ORDER BY id').all(req.params.id);
  res.json({images:images.map(x=>({id:x.id,mime:x.mime,url:'/api/maskkan/images/'+x.id}))});
 });
 app.get('/api/maskkan/images/:imageId',(req,res)=>{
  const image=db.prepare('SELECT i.data,i.mime,p.owner_id,p.status FROM maskkan_images i JOIN maskkan_properties p ON p.id=i.property_id WHERE i.id=?').get(req.params.imageId);
- if(!image || (image.status!=='approved' && req.session.user?.id!==image.owner_id && req.session.user?.identifier!==process.env.MASKKAN_ADMIN_IDENTIFIER?.toLowerCase()))return res.status(404).end();
+ if(!image || (image.status!=='approved' && req.session.user?.id!==image.owner_id && !(req.session.user?.identifier===process.env.MASKKAN_ADMIN_IDENTIFIER?.trim().toLowerCase() && process.env.MASKKAN_ADMIN_USER_ID && req.session.user?.id===Number(process.env.MASKKAN_ADMIN_USER_ID))))return res.status(404).end();
  res.set({'Content-Type':image.mime,'Cache-Control':'private, no-store','X-Content-Type-Options':'nosniff'});
  res.send(image.data);
 });
