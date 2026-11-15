@@ -22,6 +22,14 @@ test('مسّكن: protected creation, approval, update, and favorites',async t=>
  const owner=await reg('owner');const admin=await reg('manager');
  const sample={title:'شقة للإيجار في إربد',mode:'rent',property_type:'شقة',city:'إربد',district:'حي الجامعة',price:250,area_sqm:110,bedrooms:2,bathrooms:1,description:'شقة غير مفروشة',phone:'0791234567',contactConsent:true};
  assert.equal((await request('/maskkan')).status,200);
+ const lampPage=await request('/maskkan/login');
+ assert.equal(lampPage.status,200);
+ assert.match(await lampPage.text(),/Interactive Lamp|lampWrap/);
+ const lampScript=await request('/maskkan/login/script.js');
+ assert.equal(lampScript.status,200);
+ assert.match(await lampScript.text(),/location\.assign\("\/maskkan"\)/);
+ assert.equal((await request('/maskkan/login/styles.css')).status,200);
+
  assert.equal((await request('/api/maskkan/properties',json('POST',sample))).status,401);
  assert.equal((await request('/api/maskkan/properties',json('POST',sample,owner,'https://evil.example'))).status,403);
  let r=await request('/api/maskkan/properties',json('POST',sample,owner));assert.equal(r.status,201);const {id}=await r.json();
