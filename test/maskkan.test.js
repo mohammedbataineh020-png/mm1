@@ -25,11 +25,19 @@ test('مسّكن: protected creation, approval, update, and favorites',async t=>
  assert.equal((await request('/api/maskkan/properties',json('POST',sample))).status,401);
  assert.equal((await request('/api/maskkan/properties',json('POST',sample,owner,'https://evil.example'))).status,403);
  let r=await request('/api/maskkan/properties',json('POST',sample,owner));assert.equal(r.status,201);const {id}=await r.json();
+ const jpeg=Buffer.concat([Buffer.from([255,216,255]),Buffer.alloc(48,1),Buffer.from([255,217])]);
+ const imageUpload=await request('/api/maskkan/properties/'+id+'/images',{method:'POST',headers:{Origin:base,'Content-Type':'image/jpeg',Cookie:owner},body:jpeg});
+ assert.equal(imageUpload.status,201);
+ const imageId=(await imageUpload.json()).id;
+ assert.equal((await request('/api/maskkan/images/'+imageId)).status,404);
+ assert.equal((await request('/api/maskkan/images/'+imageId,{headers:{Cookie:owner}})).status,200);
+
  assert.equal((await(await request('/api/maskkan/properties')).json()).properties.length,0);
  assert.equal((await request('/api/maskkan/properties/'+id,json('PUT',sample,admin))).status,403);
  r=await request('/api/maskkan/admin/pending',{headers:{Cookie:owner}});assert.equal(r.status,403);
  r=await request('/api/maskkan/admin/pending',{headers:{Cookie:admin}});assert.equal((await r.json()).properties.length,1);
  r=await request('/api/maskkan/admin/properties/'+id,json('PATCH',{status:'approved'},admin));assert.equal(r.status,200);
+ assert.equal((await request('/api/maskkan/images/'+imageId)).status,200);
  const listed=(await(await request('/api/maskkan/properties')).json()).properties;assert.equal(listed.length,1);assert.equal(listed[0].phone,undefined);
  const details=(await(await request('/api/maskkan/properties/'+id)).json()).property;assert.equal(details.phone,'0791234567');
  assert.equal((await request('/api/maskkan/favorites/'+id,json('POST',{},owner))).status,204);
