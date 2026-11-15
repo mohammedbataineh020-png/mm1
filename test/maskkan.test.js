@@ -12,7 +12,7 @@ test('مسّكن: protected creation, approval, update, and favorites',async t=>
  const listener=net.createServer();listener.listen(0,'127.0.0.1');await once(listener,'listening');
  const port=listener.address().port;await new Promise(resolve=>listener.close(resolve));
  const base='http://127.0.0.1:'+port;
- const child=spawn(process.execPath,['server.js'],{cwd:root,env:{...process.env,NODE_ENV:'development',DATA_DIR:dir,PORT:String(port),SESSION_SECRET:'maskkan-test-secret-1234567890123456789',MASKKAN_STAGE:'true',MASKKAN_ADMIN_IDENTIFIER:'manager',MASKKAN_ADMIN_USER_ID:'2'},stdio:['ignore','pipe','pipe']});
+ const child=spawn(process.execPath,['server.js'],{cwd:root,env:{...process.env,NODE_ENV:'development',DATA_DIR:dir,PORT:String(port),SESSION_SECRET:'maskkan-test-secret-1234567890123456789',MASKKAN_STAGE:'true',MASKKAN_PUBLIC_ORIGIN:'',MASKKAN_ADMIN_IDENTIFIER:'manager',MASKKAN_ADMIN_USER_ID:'2'},stdio:['ignore','pipe','pipe']});
  let logs='';child.stderr.on('data',b=>logs+=b);
  t.after(async()=>{if(child.exitCode===null){const done=once(child,'exit');child.kill();await done}fs.rmSync(dir,{recursive:true,force:true})});
  await new Promise((resolve,reject)=>{const timeout=setTimeout(()=>reject(Error('server start timeout: '+logs)),20000);child.on('exit',code=>{clearTimeout(timeout);reject(Error('server exited: '+code+' '+logs))});child.stdout.on('data',chunk=>{if(String(chunk).includes('server running')){clearTimeout(timeout);resolve()}})});
