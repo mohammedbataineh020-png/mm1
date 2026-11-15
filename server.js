@@ -221,6 +221,10 @@ db.exec(`
  );
  CREATE INDEX IF NOT EXISTS maskkan_property_idx ON maskkan_properties (status,mode,city,property_type,price);
 `);
+// Backward-compatible migration: keep previously stored listings and photos intact.
+if (!db.pragma('table_info(maskkan_properties)').some(col=>col.name==='is_available')) {
+ db.exec('ALTER TABLE maskkan_properties ADD COLUMN is_available INTEGER NOT NULL DEFAULT 1 CHECK (is_available IN (0,1))');
+}
 const maskkanCities = ['عمّان','إربد','الزرقاء','المفرق','جرش','عجلون','البلقاء','مادبا','الكرك','الطفيلة','معان','العقبة'];
 const maskkanTypes = ['شقة','فيلا','بيت','أرض','محل','مكتب','مزرعة','استوديو'];
 const maskkanClean = (value, max) => String(value ?? '').trim().slice(0,max);
@@ -261,9 +265,9 @@ const maskkanAdmin = (req,res,next) =>
   req.session.user?.identifier === process.env.MASKKAN_ADMIN_IDENTIFIER.trim().toLowerCase() &&
   req.session.user?.id === Number(process.env.MASKKAN_ADMIN_USER_ID)
   ? next() : res.status(403).json({error:'ليس لديك صلاحية الإدارة'});
-const maskkanFields='maskkan_properties.id,title,mode,property_type,city,district,price,area_sqm,bedrooms,bathrooms,description,status,created_at,(SELECT id FROM maskkan_images WHERE property_id=maskkan_properties.id ORDER BY id LIMIT 1) AS cover_image_id';
+const maskkanFields='maskkan_properties.id,title,mode,property_type,city,district,price,area_sqm,bedrooms,bathrooms,description,status,is_available,created_at,(SELECT id FROM maskkan_images WHERE property_id=maskkan_properties.id ORDER BY id LIMIT 1) AS cover_image_id';
 app.get('/api/maskkan/properties', (req,res) => {
- const clauses=["status='approved'"], args=[];
+ const clauses=["status='approved'","is_available=1"], args=[];
  for (const key of ['mode','city','property_type']) {
    if(req.query[key]){clauses.push(key+'=?');args.push(maskkanClean(req.query[key],30));}
  }
@@ -284,8 +288,21 @@ app.get('/api/maskkan/properties', (req,res) => {
  const items=db.prepare('SELECT '+maskkanFields+' FROM maskkan_properties WHERE '+where+' ORDER BY '+order+' LIMIT ? OFFSET ?').all(...args,rawLimit,(page-1)*rawLimit);
  res.json({properties:items,page,total,hasMore:page*rawLimit<total});
 });
+app.patch('/api/maskkan/properties/:id/availability',maskkanSameOrigin,maskkanAuth,maskkanLimiter,(req,res)=>{
+ if(typeof req.body?.available!=='boolean')return res.status(400).json({error:'الحالة غير صحيحة'});
+ const owned=db.prepare('SELECT owner_id,is_available FROM maskkan_properties WHERE id=?').get(req.params.id);
+ if(!owned)return res.status(404).json({error:'العقار غير موجود'});
+ if(owned.owner_id!==req.session.user.id)return res.status(403).json({error:'ليس لديك صلاحية'});
+ const available=req.body.available?1:0;
+ if(available===1 && owned.is_available===0){
+  db.prepare("UPDATE maskkan_properties SET is_available=1,status='pending' WHERE id=?").run(req.params.id);
+  return res.json({available:true,status:'pending'});
+ }
+ db.prepare('UPDATE maskkan_properties SET is_available=? WHERE id=?').run(available,req.params.id);
+ res.json({available:!!available});
+});
 app.get('/api/maskkan/properties/:id', (req,res) => {
- const item=db.prepare('SELECT '+maskkanFields+',phone FROM maskkan_properties WHERE id=? AND status=?').get(req.params.id,'approved');
+ const item=db.prepare('SELECT '+maskkanFields+',phone FROM maskkan_properties WHERE id=? AND status=? AND is_available=1').get(req.params.id,'approved');
  if(!item)return res.status(404).json({error:'العقار غير متاح'});
  res.json({property:item});
 });
@@ -317,11 +334,11 @@ app.delete('/api/maskkan/properties/:id',maskkanSameOrigin,maskkanLimiter,maskka
  res.status(204).end();
 });
 app.get('/api/maskkan/favorites',maskkanAuth,(req,res)=>{
- const rows=db.prepare("SELECT f.property_id AS id FROM maskkan_favorites f JOIN maskkan_properties p ON p.id=f.property_id WHERE f.user_id=? AND p.status='approved'").all(req.session.user.id);
+ const rows=db.prepare("SELECT f.property_id AS id FROM maskkan_favorites f JOIN maskkan_properties p ON p.id=f.property_id WHERE f.user_id=? AND p.status='approved' AND p.is_available=1").all(req.session.user.id);
  res.json({ids:rows.map(row=>row.id)});
 });
 app.post('/api/maskkan/favorites/:id',maskkanSameOrigin,maskkanLimiter,maskkanAuth,(req,res)=>{
- if(!db.prepare("SELECT id FROM maskkan_properties WHERE id=? AND status='approved'").get(req.params.id))return res.status(404).json({error:'العقار غير متاح'});
+ if(!db.prepare("SELECT id FROM maskkan_properties WHERE id=? AND status='approved' AND is_available=1").get(req.params.id))return res.status(404).json({error:'العقار غير متاح'});
  db.prepare('INSERT OR IGNORE INTO maskkan_favorites(user_id,property_id) VALUES (?,?)').run(req.session.user.id,req.params.id);
  res.status(204).end();
 });
@@ -365,14 +382,14 @@ app.post('/api/maskkan/properties/:id/images',maskkanSameOrigin,maskkanAuth,mask
  res.status(201).json({id,status:'pending'});
 });
 app.get('/api/maskkan/properties/:id/images',(req,res)=>{
- const property=db.prepare('SELECT owner_id,status FROM maskkan_properties WHERE id=?').get(req.params.id);
- if(!property || (property.status!=='approved' && req.session.user?.id!==property.owner_id && !(req.session.user?.identifier===process.env.MASKKAN_ADMIN_IDENTIFIER?.trim().toLowerCase() && process.env.MASKKAN_ADMIN_USER_ID && req.session.user?.id===Number(process.env.MASKKAN_ADMIN_USER_ID))))return res.status(404).json({error:'العقار غير متاح'});
+ const property=db.prepare('SELECT owner_id,status,is_available FROM maskkan_properties WHERE id=?').get(req.params.id);
+ if(!property || ((property.status!=='approved'||property.is_available===0) && req.session.user?.id!==property.owner_id && !(req.session.user?.identifier===process.env.MASKKAN_ADMIN_IDENTIFIER?.trim().toLowerCase() && process.env.MASKKAN_ADMIN_USER_ID && req.session.user?.id===Number(process.env.MASKKAN_ADMIN_USER_ID))))return res.status(404).json({error:'العقار غير متاح'});
  const images=db.prepare('SELECT id,mime FROM maskkan_images WHERE property_id=? ORDER BY id').all(req.params.id);
  res.json({images:images.map(x=>({id:x.id,mime:x.mime,url:'/api/maskkan/images/'+x.id}))});
 });
 app.get('/api/maskkan/images/:imageId',(req,res)=>{
- const image=db.prepare('SELECT i.data,i.mime,p.owner_id,p.status FROM maskkan_images i JOIN maskkan_properties p ON p.id=i.property_id WHERE i.id=?').get(req.params.imageId);
- if(!image || (image.status!=='approved' && req.session.user?.id!==image.owner_id && !(req.session.user?.identifier===process.env.MASKKAN_ADMIN_IDENTIFIER?.trim().toLowerCase() && process.env.MASKKAN_ADMIN_USER_ID && req.session.user?.id===Number(process.env.MASKKAN_ADMIN_USER_ID))))return res.status(404).end();
+ const image=db.prepare('SELECT i.data,i.mime,p.owner_id,p.status,p.is_available FROM maskkan_images i JOIN maskkan_properties p ON p.id=i.property_id WHERE i.id=?').get(req.params.imageId);
+ if(!image || ((image.status!=='approved'||image.is_available===0) && req.session.user?.id!==image.owner_id && !(req.session.user?.identifier===process.env.MASKKAN_ADMIN_IDENTIFIER?.trim().toLowerCase() && process.env.MASKKAN_ADMIN_USER_ID && req.session.user?.id===Number(process.env.MASKKAN_ADMIN_USER_ID))))return res.status(404).end();
  res.set({'Content-Type':image.mime,'Cache-Control':'private, no-store','X-Content-Type-Options':'nosniff'});
  res.send(image.data);
 });
