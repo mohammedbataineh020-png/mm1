@@ -337,6 +337,10 @@ app.get('/api/maskkan/favorites',maskkanAuth,(req,res)=>{
  const rows=db.prepare("SELECT f.property_id AS id FROM maskkan_favorites f JOIN maskkan_properties p ON p.id=f.property_id WHERE f.user_id=? AND p.status='approved' AND p.is_available=1").all(req.session.user.id);
  res.json({ids:rows.map(row=>row.id)});
 });
+app.get('/api/maskkan/favorites/properties',maskkanAuth,(req,res)=>{
+ const properties=db.prepare('SELECT '+maskkanFields+' FROM maskkan_properties JOIN maskkan_favorites f ON f.property_id=maskkan_properties.id WHERE f.user_id=? AND maskkan_properties.status=? AND maskkan_properties.is_available=1 ORDER BY f.property_id DESC LIMIT 100').all(req.session.user.id,'approved');
+ res.json({properties});
+});
 app.post('/api/maskkan/favorites/:id',maskkanSameOrigin,maskkanLimiter,maskkanAuth,(req,res)=>{
  if(!db.prepare("SELECT id FROM maskkan_properties WHERE id=? AND status='approved' AND is_available=1").get(req.params.id))return res.status(404).json({error:'العقار غير متاح'});
  db.prepare('INSERT OR IGNORE INTO maskkan_favorites(user_id,property_id) VALUES (?,?)').run(req.session.user.id,req.params.id);
