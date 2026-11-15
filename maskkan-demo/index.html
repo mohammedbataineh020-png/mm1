@@ -176,9 +176,21 @@ async function maskkanOpenFavorites(){
   maskkanClose('mkAccount');mkShow('mkFavorites');
  }catch(e){alert(e.message)}
 }
-async function maskkanOpenMine(){if(!mkUser)return maskkanOpenAccount();try{const items=(await mkApi('/api/maskkan/mine')).properties;document.getElementById('mkMyItems').innerHTML=items.length?items.map(p=>'<div class="mk-status"><b>'+mkEsc(p.title)+'</b> · '+(p.is_available===0?'غير متاح':p.status==='pending'?'بانتظار المراجعة':p.status==='approved'?'منشور':'مرفوض')+'<p><button class="mk-control" data-mkavailability="'+p.id+'" data-next="'+(p.is_available===0?'true':'false')+'">'+(p.is_available===0?'إعادة عرض العقار':'تم البيع/التأجير')+'</button> <button class="mk-control" data-mkedit="'+p.id+'">تعديل</button> <button class="mk-control" data-mkdelete="'+p.id+'">حذف</button></p></div>').join(''):'لا توجد إعلانات بعد';window.mkMineItems=items;const admin=await mkApi('/api/maskkan/admin/pending').catch(()=>null);document.getElementById('mkAdminHeader').hidden=!admin;document.getElementById('mkPending').innerHTML=admin?admin.properties.map(p=>'<div class="mk-status"><b>'+mkEsc(p.title)+'</b> · '+mkEsc(p.city)+' <button class="mk-control" data-mkreview="'+p.id+'" data-state="approved">موافقة</button> <button class="mk-control" data-mkreview="'+p.id+'" data-state="rejected">رفض</button></div>').join(''):'';maskkanClose('mkAccount');mkShow('mkMine')}catch(e){alert(e.message)}}
+async function maskkanOpenMine(){if(!mkUser)return maskkanOpenAccount();try{const items=(await mkApi('/api/maskkan/mine')).properties;document.getElementById('mkMyItems').innerHTML=items.length?items.map(p=>'<div class="mk-status"><b>'+mkEsc(p.title)+'</b> · '+(p.is_available===0?'غير متاح':p.status==='pending'?'بانتظار المراجعة':p.status==='approved'?'منشور':'مرفوض')+'<p><button class="mk-control" data-mkavailability="'+p.id+'" data-next="'+(p.is_available===0?'true':'false')+'">'+(p.is_available===0?'إعادة عرض العقار':'تم البيع/التأجير')+'</button> <button class="mk-control" data-mkedit="'+p.id+'">تعديل</button> <button class="mk-control" data-mkdelete="'+p.id+'">حذف</button></p></div>').join(''):'لا توجد إعلانات بعد';window.mkMineItems=items;const admin=await mkApi('/api/maskkan/admin/pending').catch(()=>null);document.getElementById('mkAdminHeader').hidden=!admin;document.getElementById('mkPending').innerHTML=admin?admin.properties.map(p=>'<div class="mk-status">'+(p.cover_image_id?'<img src="/api/maskkan/images/'+p.cover_image_id+'" alt="صورة الإعلان" loading="lazy" style="height:125px;width:100%;object-fit:cover;border-radius:9px;margin-bottom:8px">':'')+'<b>'+mkEsc(p.title)+'</b><p>'+mkEsc(p.city)+'، '+mkEsc(p.district)+' · '+p.price.toLocaleString('en-US')+' د.أ · '+(p.mode==='rent'?'إيجار':'بيع')+'</p><p>'+mkEsc(p.description||'')+'</p><button class="mk-control" data-mkimages="'+p.id+'">عرض الصور</button> <button class="mk-control" data-mkreview="'+p.id+'" data-state="approved">موافقة</button> <button class="mk-control" data-mkreview="'+p.id+'" data-state="rejected">رفض</button></div>').join(''):'';maskkanClose('mkAccount');mkShow('mkMine')}catch(e){alert(e.message)}}
 document.addEventListener('click',async e=>{const edit=e.target.closest('[data-mkedit]'),del=e.target.closest('[data-mkdelete]'),review=e.target.closest('[data-mkreview]'),removePhoto=e.target.closest('[data-mkremovephoto]');
  const availability=e.target.closest('[data-mkavailability]'),unfavorite=e.target.closest('[data-mkunfavorite]');
+ const adminImages=e.target.closest('[data-mkimages]');
+ if(adminImages){
+  try{
+   const data=await mkApi('/api/maskkan/properties/'+adminImages.dataset.mkimages+'/images');
+   const section=adminImages.parentElement.querySelector('.mk-admin-gallery');
+   if(section){section.remove();return}
+   const el=document.createElement('div');el.className='mk-admin-gallery';
+   el.innerHTML=data.images.map(photo=>'<img loading="lazy" src="'+photo.url+'" alt="صورة الإعلان" style="width:100%;max-height:280px;object-fit:contain;margin-top:9px;border-radius:9px">').join('')||'لا توجد صور لهذا الإعلان';
+   adminImages.parentElement.appendChild(el);
+  }catch(err){alert(err.message)}return;
+ }
+
  if(availability){
   if(!confirm(availability.dataset.next==='true'?'إعادة إرسال الإعلان للمراجعة؟':'إيقاف عرض الإعلان لأنه تم بيعه أو تأجيره؟'))return;
   try{
