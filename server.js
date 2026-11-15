@@ -261,8 +261,22 @@ app.get('/api/maskkan/properties', (req,res) => {
  for (const key of ['mode','city','property_type']) {
    if(req.query[key]){clauses.push(key+'=?');args.push(maskkanClean(req.query[key],30));}
  }
- const items=db.prepare('SELECT '+maskkanFields+' FROM maskkan_properties WHERE '+clauses.join(' AND ')+' ORDER BY id DESC LIMIT 100').all(...args);
- res.json({properties:items});
+ const min=req.query.min_price===undefined?null:Number(req.query.min_price);
+ const max=req.query.max_price===undefined?null:Number(req.query.max_price);
+ if((min!==null&&(!Number.isSafeInteger(min)||min<0)) ||
+    (max!==null&&(!Number.isSafeInteger(max)||max<0)) ||
+    (min!==null&&max!==null&&min>max)) return res.status(400).json({error:'نطاق السعر غير صحيح'});
+ if(min!==null){clauses.push('price>=?');args.push(min);}
+ if(max!==null){clauses.push('price<=?');args.push(max);}
+ const order=req.query.sort==='price_asc'?'price ASC, id DESC':req.query.sort==='price_desc'?'price DESC, id DESC':'id DESC';
+ const rawLimit=req.query.limit===undefined?24:Number(req.query.limit);
+ const page=req.query.page===undefined?1:Number(req.query.page);
+ if(!Number.isSafeInteger(rawLimit)||rawLimit<1||rawLimit>50||!Number.isSafeInteger(page)||page<1||page>10000)
+   return res.status(400).json({error:'الصفحة أو عدد النتائج غير صالح'});
+ const where=clauses.join(' AND ');
+ const total=db.prepare('SELECT COUNT(*) AS total FROM maskkan_properties WHERE '+where).get(...args).total;
+ const items=db.prepare('SELECT '+maskkanFields+' FROM maskkan_properties WHERE '+where+' ORDER BY '+order+' LIMIT ? OFFSET ?').all(...args,rawLimit,(page-1)*rawLimit);
+ res.json({properties:items,page,total,hasMore:page*rawLimit<total});
 });
 app.get('/api/maskkan/properties/:id', (req,res) => {
  const item=db.prepare('SELECT '+maskkanFields+',phone FROM maskkan_properties WHERE id=? AND status=?').get(req.params.id,'approved');
