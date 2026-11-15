@@ -37,7 +37,7 @@ test('مسّكن: protected creation, approval, update, and favorites',async t=>
  assert.match(await lampScript.text(),/location\.assign\("\/maskkan"\)/);
  assert.equal((await request('/maskkan/login/styles.css')).status,200);
  const loginStyles=await (await request('/maskkan/login/styles.css')).text();
- assert.match(loginStyles,/google-signin\\[hidden\\]/);
+ assert.ok(loginStyles.includes('.google-signin[hidden]'));
 
 
  assert.equal((await request('/api/maskkan/properties',json('POST',sample))).status,401);
