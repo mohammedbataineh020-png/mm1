@@ -259,7 +259,10 @@ function maskkanParse(body) {
 function maskkanSameOrigin(req,res,next) {
   if (['GET','HEAD','OPTIONS'].includes(req.method)) return next();
   const origin = req.get('Origin');
-  const expected = req.get('X-Forwarded-Host') || req.get('Host');
+  // Prefer the configured canonical origin in production; never trust forwarded hosts from clients.
+  const expected = process.env.MASKKAN_PUBLIC_ORIGIN
+    ? new URL(process.env.MASKKAN_PUBLIC_ORIGIN).host
+    : req.get('Host');
   if (!origin || !expected) return res.status(403).json({error:'مصدر الطلب مطلوب'});
   try {
     if (new URL(origin).host !== expected) return res.status(403).json({error:'مصدر غير مصرح'});
