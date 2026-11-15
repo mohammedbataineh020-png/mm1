@@ -76,6 +76,22 @@ test('مسّكن: protected creation, approval, update, and favorites',async t=>
  const details=(await(await request('/api/maskkan/properties/'+id)).json()).property;assert.equal(details.phone,'0791234567');
  assert.equal((await request('/api/maskkan/favorites/'+id,json('POST',{},owner))).status,204);
  assert.deepEqual((await(await request('/api/maskkan/favorites',{headers:{Cookie:owner}})).json()).ids,[id]);
+ const favProperties=await request('/api/maskkan/favorites/properties',{headers:{Cookie:owner}});
+ assert.equal(favProperties.status,200);
+ assert.equal((await favProperties.json()).properties.length,1);
+ assert.equal((await request('/api/maskkan/favorites/properties')).status,401);
+ const unavailable=await request('/api/maskkan/properties/'+id+'/availability',json('PATCH',{available:false},owner));
+ assert.equal(unavailable.status,200);
+ assert.equal((await(await request('/api/maskkan/properties')).json()).total,0);
+ assert.equal((await request('/api/maskkan/properties/'+id)).status,404);
+ assert.equal((await request('/api/maskkan/images/'+imageId)).status,404);
+ assert.deepEqual((await(await request('/api/maskkan/favorites',{headers:{Cookie:owner}})).json()).ids,[]);
+ assert.equal((await request('/api/maskkan/properties/'+id+'/availability',json('PATCH',{available:true},admin))).status,403);
+ const relisted=await request('/api/maskkan/properties/'+id+'/availability',json('PATCH',{available:true},owner));
+ assert.equal(relisted.status,200);
+ assert.equal((await relisted.json()).status,'pending');
+ assert.equal((await(await request('/api/maskkan/properties')).json()).total,0);
+
  r=await request('/api/maskkan/properties/'+id,json('PUT',{...sample,price:280},owner));assert.equal(r.status,200);
  assert.equal((await(await request('/api/maskkan/properties')).json()).properties.length,0);
  assert.equal((await request('/api/maskkan/properties/'+id,json('DELETE',{},owner))).status,204);
