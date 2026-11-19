@@ -109,10 +109,14 @@ app.post("/api/auth/register", authLimiter, async (req, res, next) => {
       throw error;
     }
 
-    req.session.user = { id: Number(result.lastInsertRowid), identifier };
-    return req.session.save((error) => {
+    // Rotate the session ID after registration to prevent session fixation.
+    req.session.regenerate((error) => {
       if (error) return next(error);
-      res.status(201).json({ user: req.session.user });
+      req.session.user = { id: Number(result.lastInsertRowid), identifier };
+      req.session.save((saveError) => {
+        if (saveError) return next(saveError);
+        res.status(201).json({ user: req.session.user });
+      });
     });
   } catch (error) {
     next(error);
